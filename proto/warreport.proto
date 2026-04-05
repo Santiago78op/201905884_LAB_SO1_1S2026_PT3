@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package wartweets;
+
+// go_package le dice a protoc dónde colocar el código Go generado.
+// El path "./proto" es relativo al go.mod del módulo Go.
+option go_package = "./proto";
+
+// El enum garantiza que solo lleguen países válidos del proyecto.
+// En el MVP lo usamos como string para simplificar Rust;
+// en producción el cliente mapea el string al enum antes de enviar.
+enum Countries {
+  countries_unknown = 0;
+  usa = 1;
+  rus = 2;
+  chn = 3;
+  esp = 4;
+  gtm = 5;
+}
+
+// Mensaje de entrada: reporte militar simulado.
+// Rangos válidos: warplanes_in_air 0-50, warships_in_water 0-30.
+message WarReportRequest {
+  string country          = 1;  // "usa", "rus", "chn", "esp", "gtm"
+  int32  warplanes_in_air  = 2;
+  int32  warships_in_water = 3;
+  string timestamp        = 4;  // ISO8601 UTC, ej: "2026-03-12T20:15:30Z"
+}
+
+// Mensaje de salida: confirmación del servidor.
+message WarReportResponse {
+  string status = 1;  // "OK" si todo salió bien
+}
+
+// El servicio gRPC que implementa el servidor Go y consume el cliente Rust.
+service WarReportService {
+  rpc SendReport (WarReportRequest) returns (WarReportResponse);
+}
