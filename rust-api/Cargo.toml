@@ -4,28 +4,3 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# actix-web: framework HTTP asíncrono. Maneja routing, middlewares, extractores JSON.
-actix-web = "4"
-
-# tokio: runtime async de Rust. actix-web y tonic lo necesitan.
-# "full" habilita todas las features (timers, fs, net, etc.)
-tokio = { version = "1", features = ["full"] }
-
-# serde + serde_json: serialización/deserialización JSON.
-# "derive" habilita los macros #[derive(Serialize, Deserialize)].
-serde       = { version = "1", features = ["derive"] }
-serde_json  = "1"
-
-# tonic: librería gRPC para Rust. Actúa como cliente y servidor.
-# Usamos "transport" para abrir conexiones TCP hacia el servidor Go.
-tonic = { version = "0.12", features = ["transport"] }
-
-# prost: serializa/deserializa los mensajes Protocol Buffers en Rust.
-# tonic lo usa internamente; lo declaramos explícitamente para usar
-# los tipos generados (WarReportRequest, etc.).
-prost = "0.13"
-
-[build-dependencies]
-# tonic-build: ejecutado por build.rs para generar código Rust desde .proto.
-# Solo se necesita en tiempo de compilación, no en el binario final.
-tonic-build = "0.12"
