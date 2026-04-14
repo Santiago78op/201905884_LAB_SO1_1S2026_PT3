@@ -80,3 +80,17 @@ All architectural decisions, service specs, and observability setup live in `obs
 - `03-Infraestructura/` — GKE, KubeVirt, Zot setup
 - `04-Observabilidad/` — Grafana dashboards
 - `05-Pruebas/` — testing strategy
+
+## MANDATORY: Session Start Protocol
+
+**ALWAYS read the Obsidian vault before doing anything else in this project.** This is the single source of truth for all architectural decisions, service specs, and contracts. Do NOT rely solely on CLAUDE.md or memory — Obsidian has the authoritative detail.
+
+Read these files at the start of every session, in this order:
+1. `obsidian/00-Context/proyecto-enunciado.md` — project requirements and scoring
+2. `obsidian/01-Arquitectura/arquitectura-general.md` — full system diagram
+3. `obsidian/01-Arquitectura/flujo-de-datos.md` — data flow details
+4. `obsidian/02-Servicios/contratos-grpc.md` — exact proto definition (including enum Countries)
+
+Then read the specific service files relevant to the current task before touching any code.
+
+**Why:** The user integrated Obsidian specifically to minimize token waste and avoid re-explaining context each session. Skipping this forces the user to repeat themselves and wastes tokens correcting mismatches between the code and the documented spec.
