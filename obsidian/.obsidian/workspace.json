@@ -181,21 +181,23 @@
   },
   "active": "b77c23c8fb66d386",
   "lastOpenFiles": [
+    "Prompts/README.md",
+    "Prompts/docente-universitario.md",
+    "04-Observabilidad/dashboards-grafana.md",
+    "02-Servicios/esquema-mensajes-rabbitmq.md",
+    "02-Servicios/grpc-server.md",
     "02-Servicios/consumer.md",
     "01-Arquitectura/arquitectura-general.md",
     "05-Pruebas/locust.md",
     "02-Servicios/valkey.md",
     "04-Observabilidad/grafana.md",
-    "04-Observabilidad/dashboards-grafana.md",
     "03-Infraestructura/zot.md",
     "03-Infraestructura/gke.md",
     "03-Infraestructura/deployments.md",
     "03-Infraestructura/deployment-k8s.md",
     "02-Servicios/rabbitmq.md",
     "02-Servicios/locust.md",
-    "02-Servicios/grpc-server.md",
     "02-Servicios/gateway-api.md",
-    "02-Servicios/esquema-mensajes-rabbitmq.md",
     "02-Servicios/contratos-grpc.md",
     "01-Arquitectura/flujo-de-datos.md",
     "01-Arquitectura/decisiones-tecnicas.md",
@@ -203,9 +205,7 @@
     "03-Infraestructura/kubevirt.md",
     "02-Servicios/rust-api.md",
     "02-Servicios/grpc-client.md",
-    "Prompts/README.md",
     "Agents/README.md",
-    "00-Context/Untitled.md",
-    "Untitled.md"
+    "00-Context/Untitled.md"
   ]
 }

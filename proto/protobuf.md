@@ -75,6 +75,44 @@ type WarReportServiceServer interface {
 
 Google Remote Procedure Call, es un framework de código abierto, de alto rendimiento, desarrollado por Google para facilitar la comunicación entre servicios (microservicios) y aplicaciones cliente-servidor. Utiliza HTTP/2 para transporte y Protocol Buffers como lenguaje de definición de interfaz para serializar datos en binario, siendo más rápido y ligero que REST/JSON.
 
-**Que es Implementación de una Interfaz**
+### Que es una Interfaz
+
+Es como un contrato de trabajo.
+
+Una empresa (el cliente gRPC) publica una oferta: **"Necesito a alguien que sepa hacer SendReport"**. No le importa quién lo haga ni cómo lo haga internamente — solo que lo sepa hacer.
+
+Esa oferta es la interfaz. **El servidor**, es el, que aplica al trabajo y cumple el requisito, implementa la interfaz. 
+
+En Go se ve:
+
+```go
+// Esto es la interfaz — el "contrato" que generó protoc              
+type WarReportServiceServer interface 
+{
+	SendReport(context.Context, *WarReportRequest) (*WarReportResponse, error)
+}
+```
+
+Esto dice: **"cualquier struct que tenga un método llamado SendReport con esa firma, cuenta como un WarReportServiceServer"**.
+
+### ¿Cómo se implementa?                      
+
+Se crea un struct propio y se inyecta ese método:
+
+```go
+// Candidato que aplica al contrato
+// Go verifica automáticamente si califica cuando intenta registrarse en el servidor gRPC.
+type MiServidor struct{}
+
+func (s *MiServidor) SendReport(...) (...) {                                                                                              
+	// aquí va tu lógica               
+}
+```
+
+Go automáticamente reconoce que MiServidor, implementa la interfaz — sin que tenga que declararce explícitamente. Solo basta con que el método exista con la firma correcta.
+
+### ¿Por qué protoc genera una interfaz y no directamente el código?
+
+Porque protoc no sabe la lógica de negocio. Él define el qué (recibir un WarReportRequest y devolver un WarReportResponse), pero el programdor define el cómo (publicar a RabbitMQ, validar datos, etc.).
 
 ![gRPC](./img/grpc.png)
