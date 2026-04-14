@@ -1,7 +1,7 @@
 ---
 title: Contratos gRPC — WarReportService
 created: 2026-04-05
-updated: 2026-04-05
+updated: 2026-04-14
 tags: [grpc, proto, contratos]
 status: activo
 ---
@@ -53,16 +53,23 @@ service WarReportService {
 
 ## Archivos en el Repositorio
 
-- Definición: `proto/warreport.proto`
-- Código generado Go (Go packages necesarios):
+- Definicion: `proto/warreport.proto`
+- Codigo generado (disponible desde 2026-04-14):
+  - `proto/warreport.pb.go` — structs `WarReportRequest`, `WarReportResponse`, enum `Countries`
+  - `proto/warreport_grpc.pb.go` — interfaz `WarReportServiceServer` y stub cliente gRPC
+- Go packages requeridos:
   - `google.golang.org/grpc`
   - `google.golang.org/protobuf`
 
-## Generación de Código
+## Generacion de Codigo
+
+Comando verificado y ejecutado exitosamente el 2026-04-14:
 
 ```bash
-protoc --go_out=. --go-grpc_out=. proto/warreport.proto
+protoc -I=proto --go_out=proto --go-grpc_out=proto warreport.proto
 ```
+
+Nota: `-I=proto` indica el directorio de busqueda del .proto; `--go_out=proto` deposita los archivos generados dentro de `proto/`.
 
 ## Conexiones
 
