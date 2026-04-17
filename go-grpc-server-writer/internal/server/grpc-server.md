@@ -47,4 +47,28 @@ Si la conexión a RabbitMQ falla, el proceso muere en main.go antes de levantar 
 
 Cuando el proceso muere limpio en ``main.go`` antes de levantar, **Kubernetes** lo detecta inmediatamente como un **pod** que no arrancó y puede reiniciarlo o reportar el error. Si falla adentro de una **goroutine** atendiendo peticiones, el **pod** sigue "vivo" para Kubernetes pero está en estado corrupto sirviendo errores silenciosamente.
 
-Ese concepto se llama **liveness** — y es crítico en sistemas distribuidos.  
+Ese concepto se llama **liveness** — y es crítico en sistemas distribuidos. 
+
+```bash
+pipeline
+
+Locust → Rust API → Go Client → [Go gRPC SERVER] → RabbitMQ → Consumer → Valkey → Grafana                            
+                                          ↑                                          
+                                        ACTUAL
+```
+
+## Warreport_grpc_.pb.go
+
+La interfaz cuenta con dos metodos:
+
+* **SendReport:** Es el método de negocio. El RPC que se definio en el ``.proto``. El server tiene que implementarlo para procesar los reportes militares que llegan del gRPC Client.
+
+* **mustEmbedUnimplementedWarReportServiceServer:** Este es un mecanismo de protección de gPRC en Go. En lugar de implementarlo manualmente, protoc genera un struct auxiliar llamado **UnimplementedWarReportServiceServer**. Si se **embeds** dentro del **Server**, ese método queda satisfecho automaticamente.
+
+El ``UnimplementedWarReportServiceServer`` ya implementa todos los métodos de la interfaz con respuestas de error por defecto. Al embederlo en el Server, el struct hereda esas implementaciones automáticamente. 
+
+El **SendReport** es el método de negocio. Su firma en Go debe coincidir exactamente con lo que la interfaz exige.
+
+```Go
+func (s *Server) SendReport(ctx context.Context, req *proto.WarReportRequest) (*proto.WarReportResponse, error) 
+```

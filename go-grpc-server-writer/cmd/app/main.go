@@ -3,5 +3,6 @@ package main
 import "fmt"
 
 func main() {
-	fmt.Println("go-grpc-server-writer iniciado")
+	// Conexion a RabbitMQ
+	conn, err := amqp.Dial()
 }
