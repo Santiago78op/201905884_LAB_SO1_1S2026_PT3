@@ -44,3 +44,29 @@ El estudiante no respondió la pregunta: **¿Guardar Connection, Channel, o ambo
 - `go-grpc-server-writer/cmd/app/main.go` — existe, vacío o stub
 - `go-grpc-server-writer/go.mod` — existe
 - `go-grpc-server-writer/internal/server/` — carpeta creada, sin archivos de código aún
+
+---
+
+## Sesión 2026-04-17 — go-grpc-server-writer (continuación)
+
+### Componente trabajado
+`go-grpc-server-writer` — continuación de la sesión anterior.
+
+### Temas cubiertos
+1. **Connection vs Channel en amqp** — el estudiante entendió por qué se guardan ambos: Channel puede fallar y necesitas Connection para abrir uno nuevo sin reconectar.
+2. **Fail-fast** — el estudiante entendió que inicializar la conexión en `main.go` antes de levantar el servidor gRPC es mejor que fallar dentro de una goroutine activa. Conectado con liveness en Kubernetes.
+3. **Struct `Server` implementado** — campos `connection *amqp.Connection` y `channel *amqp.Channel`, campos no exportados (privados al package). Import correcto `amqp091-go`. Dependencia añadida al `go.mod`.
+
+### Punto de parada
+El estudiante terminó la sesión mientras se le preguntaba: **¿Cómo sabe Go que `Server` implementa `WarReportServiceServer`?** — no respondió todavía.
+
+### Próximo paso (cuando retome)
+1. Responder: en Go no hay `implements` — el compilador lo verifica cuando asignas el struct a una variable del tipo interfaz. El método tiene que existir con la firma exacta.
+2. Agregar el import del package proto al `grpc-server.go`.
+3. Implementar el método `SendReport` con la firma exacta — sin lógica de negocio todavía, solo que compile.
+4. Luego: implementar la lógica de publicación a RabbitMQ dentro de `SendReport`.
+
+### Estado de archivos al cerrar sesión
+- `go-grpc-server-writer/internal/server/grpc-server.go` — struct `Server` con campos amqp, compila
+- `go-grpc-server-writer/go.mod` — tiene `github.com/rabbitmq/amqp091-go v1.10.0`
+- `go-grpc-server-writer/cmd/app/main.go` — sigue siendo stub

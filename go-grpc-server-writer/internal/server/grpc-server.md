@@ -31,7 +31,20 @@ Sin RabbitMQ, si el consumer es lento, tu servidor gRPC se bloquea. Con RabbitMQ
 Para hablar con RabbitMQ desde Go se usa amqp091-go. Cuando te conectas exitosamente, la librería te devuelve dos cosas:
 
 1. Una *amqp.Connection — la conexión TCP al servidor RabbitMQ
-                                                           
+    - Es como el socket TCP — la conexión física con el servidor RabbitMQ. Ocupa recursos en el OS (file descriptor, buffers, etc.).                      
 2. Un *amqp.Channel — el canal por donde publicas mensajes
+    - Es como un canal virtual que vive dentro de esa conexión. Puedes tener muchos channels sobre una sola connection.
 
-Pregunta: ¿Cuál de los dos guardarías en tu struct — la Connection, el Channel, o ambos? ¿Por qué?
+## ¿qué pasa si el *amqp.Channel falla o se cierra inesperadamente? 
+Con solo el channel guardado, no se puede recuperar — si en caso se pierde la referencia a la connection y no se puede abrir un channel nuevo.                           
+                  
+* Con ambos guardados, el struct puede hacer: connection.Channel() → abre un channel nuevo sin reconectar
+
+* Eso se conecta con algo de SO1: tolerancia a fallos en IPC. Los canales de comunicación entre procesos pueden fallar, y un sistema robusto necesita poder reestablecerlos sin reiniciar todo. 
+
+## Fail - Fast 
+Si la conexión a RabbitMQ falla, el proceso muere en main.go antes de levantar el servidor gRPC.
+
+Cuando el proceso muere limpio en ``main.go`` antes de levantar, **Kubernetes** lo detecta inmediatamente como un **pod** que no arrancó y puede reiniciarlo o reportar el error. Si falla adentro de una **goroutine** atendiendo peticiones, el **pod** sigue "vivo" para Kubernetes pero está en estado corrupto sirviendo errores silenciosamente.
+
+Ese concepto se llama **liveness** — y es crítico en sistemas distribuidos.  
