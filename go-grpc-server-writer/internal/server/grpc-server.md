@@ -72,3 +72,28 @@ El **SendReport** es el método de negocio. Su firma en Go debe coincidir exacta
 ```Go
 func (s *Server) SendReport(ctx context.Context, req *proto.WarReportRequest) (*proto.WarReportResponse, error) 
 ```
+
+## Socket y Puertos
+
+En Sistemas Operativos, cuando un proceso quiere **recibir** conexiones de red, debe pedirle al kernel que le asigne un **socket** - un descriptor de archivo especial que representa a un punto de comunicación.
+
+El proceso le dice al kernel: "quiero un socket TCP que escuche en el puerto 50051". El kernel le asigna ese socket y lo marca como "escuchando" en ese puerto. Esto es nombrado como **bind** + **listen**.
+
+```go
+net.Listen("tcp", ":50051")
+```
+
+Esto devuelve un **net.Listener** que representa ese socket. El proceso puede entonces llamar a **Accept()** en ese listener para esperar conexiones entrantes. Cada vez que un cliente se conecta, el kernel acepta la conexión y devuelve un nuevo socket para esa conexión específica.
+
+## Que es un Exchange en RabbitMQ?
+Un **exchange** es un componente de RabbitMQ que recibe mensajes de los productores y los enruta a las colas según reglas definidas. Es como un "enrutador" que decide a qué cola enviar cada mensaje basado en su tipo o contenido.
+
+RabbitMQ no funciona como un buzón simple. Tiene este modelo:
+
+```
+Producer → [Exchange] → [Queue] → Consumer
+```
+
+El **Exchange** es el **enrutador**. Recibe el mensaje y decide a qué **Queue** enviarlo. Basandose en la **routing key** o el **binding** que se haya configurado.
+
+Si se publica un **exchange** que no *existe* en RabbitMQ, el mensaje no se puede enrutar a ninguna cola y se pierde. Por eso es importante asegurarse de que el exchange esté creado antes de publicar mensajes.

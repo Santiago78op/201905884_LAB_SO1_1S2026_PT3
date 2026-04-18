@@ -1,4 +1,7 @@
-# Server struct y el método.
+# ¿Qué es este componente?
+Este componente es un servidor gRPC que implementa la interfaz definida por el archivo Protobuf. Su función principal es recibir solicitudes de los clientes gRPC, procesarlas y devolver respuestas.
+
+## Server struct y el método.
 
 El struct no es la base de la interfaz. La interfaz existe independientemente — la generó protoc y no le importa quién la implemente.
 
