@@ -3,15 +3,15 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 	"time"
 
 	proto "201905884_LAB_SO1_1S2026_PT3/proto"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
-
-type OutPutFaildOnError struct{}
 
 type Server struct {
 	connection *amqp.Connection
@@ -22,9 +22,9 @@ type Server struct {
 func (s *Server) SendReport(ctx context.Context, req *proto.WarReportRequest) (*proto.WarReportResponse, error) {
 	jsonData, err := json.Marshal(req)
 
-	o := OutPutFaildOnError{}
-	o.FaildOnError(err, "Fail to serealize request")
-
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "Json Data null")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -39,16 +39,11 @@ func (s *Server) SendReport(ctx context.Context, req *proto.WarReportRequest) (*
 		},
 	)
 
-	o.FaildOnError(err, "Failed to publish to RabbitMQ")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to publish to RabbitMQ")
+	}
 
 	return &proto.WarReportResponse{Status: "ok"}, nil
-}
-
-// Función para manejar errores
-func (o OutPutFaildOnError) FaildOnError(err error, msg string) {
-	if err != nil {
-		log.Panicf("%s: %s", msg, err)
-	}
 }
 
 /* NewServer Struct
@@ -66,7 +61,7 @@ func NewServer(conn *amqp.Connection, ch *amqp.Channel) *Server {
 }
 
 /* setupRabbitMQ */
-func setupRabbitMQ(ch *amqp.Channel) {
+func setupRabbitMQ(ch *amqp.Channel) error {
 	// Declarar el exchange
 	err := ch.ExchangeDeclare(
 		"warreport_exchange",
@@ -79,7 +74,7 @@ func setupRabbitMQ(ch *amqp.Channel) {
 	)
 	// Manejar errores
 	if err != nil {
-		log.Panicf("Failed to declare exchange: %s", err)
+		return fmt.Errorf("Failed to declare exchange: %s", err)
 	}
 
 	// Declarar la Queue
@@ -92,7 +87,7 @@ func setupRabbitMQ(ch *amqp.Channel) {
 		nil,
 	)
 	if err != nil {
-		log.Panicf("Failed to declare queue: %s", err)
+		return fmt.Errorf("Failed to declare queue: %s", err)
 	}
 
 	// Binding con routing key: warreport.process
@@ -103,7 +98,10 @@ func setupRabbitMQ(ch *amqp.Channel) {
 		false,
 		nil,
 	)
+
 	if err != nil {
-		log.Panicf("Failed to bind queue: %s", err)
+		return fmt.Errorf("Failed to bind queue: %s", err)
 	}
+
+	return nil
 }

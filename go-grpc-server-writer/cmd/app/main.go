@@ -3,6 +3,7 @@ package main
 import (
 	"201905884_LAB_SO1_1S2026_PT3/go-grpc-server-writer/internal/server"
 	"201905884_LAB_SO1_1S2026_PT3/proto"
+	"log"
 	"net"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -18,13 +19,16 @@ func main() {
 	// Coneccion a RabbitMQ
 	conn, err := amqp.Dial("amqp://guest:guest@locatehost:5672/")
 	// Si falla importamos Panicf con err
-	failMsg := server.OutPutFaildOnError{}
-	failMsg.FaildOnError(err, "Fail to connect to RabbitMQ")
+	if err != nil {
+		log.Fatalf("Faild to connect to RabbitMQ: %v", err)
+	}
 	defer conn.Close()
 
 	// Abrir canal
 	ch, err := conn.Channel()
-	failMsg.FaildOnError(err, "Faild to open a channel")
+	if err != nil {
+		log.Fatalf("Failed to open RabbitMQ channel: %v", err)
+	}
 	defer ch.Close()
 
 	// Creación de server Struct
@@ -32,7 +36,9 @@ func main() {
 
 	// Abrir puerto TCP para gRPC
 	netListener, err := net.Listen("tcp", ":50051")
-	failMsg.FaildOnError(err, "Faild to listen on port 50051")
+	if err != nil {
+		log.Fatalf("Failed to listen on port 50051: %v", err)
+	}
 	defer netListener.Close()
 
 	// Crear gRPC server
@@ -42,6 +48,7 @@ func main() {
 	proto.RegisterWarReportServiceServer(grpcServer, srv)
 
 	// Arrancar el servidor gRPC
-	failMsg.FaildOnError(grpcServer.Serve(netListener), "Failed to serve gRPC server")
-
+	if err := grpcServer.Serve(netListener); err != nil {
+		log.Fatalf("Failed to serve gRPC server: %v", err)
+	}
 }
