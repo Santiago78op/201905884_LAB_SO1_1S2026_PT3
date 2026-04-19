@@ -25,6 +25,21 @@ type Handler struct {
 	GRPCClient *client.GRPCClient
 }
 
+/* Función NewHandler
+* NewHandler es el constructor de Handler. Recibe una instancia del cliente gRPC y devuelve una nueva instancia de Handler con el cliente gRPC configurado.
+*
+* Parámetros:
+* 	- grpcClient: Es una instancia del cliente gRPC que se utiliza para enviar solicitudes al servidor gRPC. Este cliente se configura para comunicarse con el servicio de informes de guerra definido en el archivo proto.
+*
+* Retorna:
+* 	- *Handler: Una nueva instancia de Handler con el cliente gRPC configurado.
+ */
+func NewHandler(grpcClient *client.GRPCClient) *Handler {
+	return &Handler{
+		GRPCClient: grpcClient,
+	}
+}
+
 /* ServeHTTP
 * Mapeo de campos del struct WarReport a los campos del mensaje gRPC WarReportRequest para enviar la solicitud al servidor gRPC.
  */
