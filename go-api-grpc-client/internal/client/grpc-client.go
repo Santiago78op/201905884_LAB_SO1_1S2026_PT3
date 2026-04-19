@@ -17,8 +17,8 @@ import (
 *	- Close(): Es un método que se utiliza para cerrar la conexión gRPC cuando ya no se necesita. Esto es importante para liberar recursos y evitar fugas de memoria.
  */
 type GRPCClient struct {
-	conn   *grpc.ClientConn
-	client proto.WarReportServiceClient
+	Conn   *grpc.ClientConn
+	Client proto.WarReportServiceClient
 }
 
 /* Método NewClient
@@ -47,8 +47,8 @@ func NewClient(address string) (*GRPCClient, error) {
 
 	// Retorna el struct GRPCClient con la conexión y el cliente gRPC configurados
 	return &GRPCClient{
-		conn:   conn,
-		client: client,
+		Conn:   conn,
+		Client: client,
 	}, nil
 }
 
@@ -59,7 +59,7 @@ func NewClient(address string) (*GRPCClient, error) {
 * 	- Llama al método Close() de la conexión gRPC para cerrar la conexión con el servidor.
  */
 func (c *GRPCClient) Close() {
-	if c.conn != nil {
-		c.conn.Close()
+	if c.Conn != nil {
+		c.Conn.Close()
 	}
 }
