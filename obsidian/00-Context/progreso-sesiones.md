@@ -1,7 +1,7 @@
 ---
 title: Progreso de Sesiones — Pegasus
 created: 2026-04-14
-updated: 2026-04-19
+updated: 2026-04-19 (sesión 2)
 tags: [progreso, sesiones, contexto]
 status: activo
 project: pegasus
@@ -13,7 +13,61 @@ Registro cronológico del avance por sesión de trabajo.
 
 ---
 
-## 2026-04-19 — Sistema Multi-Agente de Validación + Diagnóstico de código
+## 2026-04-19 (sesión 2) — go-rabbit-consumer: estructura base + dependencias
+
+### Resumen
+Se implementó la estructura base del consumer: struct, constructor, loop de consumo y deserialización de mensajes. Compila sin errores. Las escrituras a Valkey para los 11 paneles de Grafana quedan como próximo paso.
+
+### Lo que se hizo
+
+1. **`go-rabbit-consumer/internal/consumer/consumer.go`** (nuevo archivo)
+   - `Consumer` struct con `*amqp.Connection`, `*amqp.Channel`, `valkey.Client`
+   - `NewConsumer(connection, valkeyClient)` — inyección de dependencias, crea channel internamente
+   - `Start(queueName string)` — `channel.Consume` + goroutine loop
+   - `processMessage(msg amqp.Delivery)` — `protojson.Unmarshal` en `proto.WarReportRequest`, imprime campos
+
+2. **Dependencias agregadas al go.mod**
+   - `github.com/rabbitmq/amqp091-go v1.10.0`
+   - `github.com/valkey-io/valkey-go v1.0.74`
+   - `201905884_LAB_SO1_1S2026_PT3/proto` con replace `=> ../proto`
+
+3. **Decisiones técnicas**
+   - `valkey-go` en lugar de go-redis — nativo para Valkey, API más correcta
+   - `protojson.Unmarshal` para deserializar — el enum Countries llega como string `"chn"`, no como número entero
+
+### Estado al cierre
+- `go-rabbit-consumer` compila sin errores
+- Falta: implementar en `processMessage` las 11 escrituras Valkey
+
+### Bug pendiente (go-grpc-server-writer)
+- `"locatehost"` typo en `cmd/app/main.go` línea 20
+- Todos los hostnames deben usar `os.Getenv()` con fallback a `"localhost"`
+
+### Pendiente para próxima sesión — escrituras Valkey en processMessage
+
+| Visualización | Key Valkey | Operación |
+|---|---|---|
+| Max aviones | `max_warplanes` | SET si mayor |
+| Min aviones | `min_warplanes` | SET si menor |
+| Max barcos | `max_warships` | SET si mayor |
+| Min barcos | `min_warships` | SET si menor |
+| Top países aviones | `rss_rank` | ZADD |
+| Top países barcos | `cpu_rank` | ZADD |
+| Moda aviones | `moda_warplanes` | HINCRBY |
+| Moda barcos | `moda_warships` | HINCRBY |
+| Serie temporal | `meminfo` | LPUSH (JSON) |
+| País asignado | constante CHN | — |
+| Total reportes CHN | `total_chn` | INCR |
+
+### Próxima sesión
+- Leer antes de comenzar: [[consumer]], [[esquema-mensajes-rabbitmq]]
+- Implementar las 11 escrituras Valkey en `processMessage`
+- Fix typo `locatehost` en `go-grpc-server-writer`
+- Validar con: `~/.local/bin/uv run python3 main.py --area messaging`
+
+---
+
+## 2026-04-19 (sesión 1) — Sistema Multi-Agente de Validación + Diagnostico de codigo
 
 ### Resumen
 Se creó un sistema completo de validación con 5 agentes (1 maestro + 4 especializados) usando el Anthropic Python SDK. Se realizó un diagnóstico del estado real del código y se identificaron los gaps críticos antes del deadline.
