@@ -34,3 +34,46 @@ El Consumer se conecta a RabbitMQ, escucha los mensajes de la cola `warreport_qu
 | Serie temporal         | `LPUSH meminfo <json>`           | Lista                               |
 | País asignado          | `constante "CHN"`                | No necesita Valkey                  |
 | Total reportes país    | `INCR total_chn`                 | Contador                            |
+
+## Cliente Redis/Valkey
+El cliente de Valkey se encarga de escribir los datos procesados en Valkey utilizando comandos específicos para cada tipo de operación (SET, ZADD, HINCRBY, LPUSH, INCR).
+
+```go
+cliente.Set(ctx, "key", "value", 0) // método directo
+```
+
+**valkey-go funciona diferente**. Usa un patrón de **builder + executor**:
+
+```go
+client.Do(ctx,  client.B().Set().Key("key").Value("value").Build())
+```
+
+| Parte | ¿Qué hace? |
+|------|------------|
+| `client.B()` | Inicia la construcción de un comando. |
+| `.Set().Key(...).Value(...).Build()` | Define qué comando es y cuáles son sus parámetros. |
+| `client.Do(ctx, ...)` | Ejecuta el comando construido en Valkey. |
+
+El  builder garantiza en **tiempo de compilación** que el comando esté bien formado, evitando errores comunes como olvidar un campo obligatorio o usar un tipo de dato incorrecto. Si olvidas `.key(...)`. el código no compilará, lo que es una gran ventaja para la seguridad y robustez de la aplicación. Con el patrón de metodo directo, los errores se detectan en runtime.
+
+## Estructura
+
+```
+SET:     client.B().Set().Key("k").Value("v").Build()
+ZADD:    client.B().Zadd().Key("k").ScoreMember().ScoreMember(score, "member").Build()                                                            
+HINCRBY: client.B().Hincrby().Key("k").Field("f").Increment(1).Build()                                                        LPUSH:   client.B().Lpush().Key("k").Element("v").Build()                                                            INCR:    client.B().Incr().Key("k").Build()                                                            GET:     client.B().Get().Key("k").Build()
+```
+
+## Una cosa importante
+
+`Do` retorna un `valkey.ValkeyResult`. Para leer el valor (cuando haces GET), usas `.ToString()` o `.AsInt64()` sobre el resultado.
+
+Este retorno es de tipo **wraper** no es un valor directamente, es un contenedor que puede tener el valor o un error.
+
+```go
+resultado.ToString() // devuelve el valor como string o un error si no se pudo obtener
+resultado.AsInt64() // devuelve el valor como int64 o un error si no se pudo obtener
+resultado.AsFloat64() // devuelve el valor como float64 o un error si no se pudo obtener
+```
+
+Cuando `valkey.Nil`. No es un error de conexión es la señal de "key no encontrada".

@@ -1,6 +1,9 @@
 package consumer
 
 import (
+	"context"
+	"strconv"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/valkey-io/valkey-go"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -43,7 +46,7 @@ func NewConsumer(connection *amqp.Connection, valkeyClient valkey.Client) (*Cons
 /* Método Start de Consumer
 * Start es un método de Consumer que inicia el proceso de consumo de mensajes desde RabbitMQ. Este método se encarga de configurar la cola, consumir los mensajes y procesarlos utilizando el cliente de Valkey para descifrar los mensajes recibidos.
  */
-func (c *Consumer) Start(queueName string) error {
+func (c *Consumer) Start(ctx context.Context, queueName string) error {
 	// Suscribirse a la cola warreport_queue con channel.Consume
 	msgs, err := c.channel.Consume(
 		queueName, // queue
@@ -61,7 +64,7 @@ func (c *Consumer) Start(queueName string) error {
 	// Entrar en un loop que reciba los mensajes de la cola y los procese con la función processMessage
 	go func() {
 		for msg := range msgs {
-			c.processMessage(msg)
+			c.processMessage(ctx, msg)
 		}
 	}()
 
@@ -71,7 +74,7 @@ func (c *Consumer) Start(queueName string) error {
 /* Método processMessage de Consumer
 * processMessage es un método de Consumer que se encarga de procesar un mensaje recibido desde RabbitMQ. Este método utiliza el cliente de Valkey para descifrar el mensaje y luego realiza las operaciones necesarias para manejar el contenido del mensaje.
  */
-func (c *Consumer) processMessage(msg amqp.Delivery) {
+func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) {
 	// Declarar variable req de tipo proto.WarReportRequest
 	var req proto.WarReportRequest
 
@@ -82,12 +85,84 @@ func (c *Consumer) processMessage(msg amqp.Delivery) {
 		return
 	}
 
-	//imprimir el contenido del mensaje recibido
-	println("Mensaje recibido:")
-	println("Country:", req.Country)
-	println("Warplanes in Air:", req.WarplanesInAir)
-	println("Warships in Water:", req.WarshipsInWater)
-	println("Timestamp:", req.Timestamp)
+	/*
+	*   Grupo 1 — Strings (máximos y mínimos): 4 operaciones
+	*	Grupo 2 — Sorted Sets (rankings): 2 operaciones
+	*	Grupo 3 — Hash (modas): 2 operaciones
+	*	Grupo 4 — List (serie temporal): 1 operación
+	*	Grupo 5 — Contador país asignado (CHN): 1 operación
+	 */
+	// Grupo 1 — Strings (máximos): 4
+	c.updateMax(ctx, c.valkeyClient, "max_warplanes_in_air", req.WarplanesInAir)
+	c.updateMax(ctx, c.valkeyClient, "max_warships_in_water", req.WarshipsInWater)
+	// Grupo 1 — Strings (mínimos): 4
+	c.updateMin(ctx, c.valkeyClient, "min_warplanes_in_air", req.WarplanesInAir)
+	c.updateMin(ctx, c.valkeyClient, "min_warships_in_water", req.WarshipsInWater)
 
-	// Falta agregar la lógica adicional para manejar el mensaje, como almacenar los datos en una base de datos o realizar otras operaciones necesarias.
+	// Grupo 2 — Sorted Sets (rankings): 2
+	c.updateRanking(ctx, c.valkeyClient, "rss_rank", req.Country.String(), req.WarplanesInAir)
+	c.updateRanking(ctx, c.valkeyClient, "cpu_rank", req.Country.String(), req.WarshipsInWater)
+
+}
+
+/* Función updateMax
+* Grupo 1 — Strings (máximos): 4 operaciones
+ */
+func (c *Consumer) updateMax(ctx context.Context, client valkey.Client, key string, value int32) error {
+	// Obtener el valor actual almacenado en Redis para la clave dada utilizando client.Do con una operación de tipo Get. Convertir el resultado a un entero utilizando result.AsInt64().
+	result := client.Do(ctx, client.B().Get().Key(key).Build())
+	currentValue, err := result.AsInt64()
+
+	if err != nil {
+		// Valida que el error es valkey.Nil
+		if valkey.IsValkeyNil(err) {
+			return client.Do(ctx, client.B().Set().Key(key).Value(strconv.FormatInt(int64(value), 10)).Build()).Error()
+		} else {
+			// Manejar el error de obtención del valor actual
+			return err
+		}
+	}
+
+	// Comparar el valor actual con el nuevo valor recibido. Si el nuevo valor es mayor, actualizar el valor almacenado en Redis utilizando client.Do con una operación de tipo Set.
+	if currentValue < int64(value) {
+		// Actualizar el valor almacenado en Redis utilizando client.Do con una operación de tipo Set. Convertir el nuevo valor a una cadena utilizando strconv.FormatInt.
+		return client.Do(ctx, client.B().Set().Key(key).Value(strconv.FormatInt(int64(value), 10)).Build()).Error()
+	}
+
+	return nil
+}
+
+/* Función updateMin
+* Grupo 1 — Strings (mínimos): 4 operaciones
+ */
+func (c *Consumer) updateMin(ctx context.Context, client valkey.Client, key string, value int32) error {
+	// Obtener el valor actual almacenado en Redis para la clave dada utilizando client.Do con una operación de tipo Get. Convertir el resultado a un entero utilizando result.AsInt64().
+	result := client.Do(ctx, client.B().Get().Key(key).Build())
+	currentValue, err := result.AsInt64()
+
+	if err != nil {
+		// Valida que el error es valkey.Nil
+		if valkey.IsValkeyNil(err) {
+			return client.Do(ctx, client.B().Set().Key(key).Value(strconv.FormatInt(int64(value), 10)).Build()).Error()
+		} else {
+			// Manejar el error de obtención del valor actual
+			return err
+		}
+	}
+
+	// Comparar el valor actual con el nuevo valor recibido. Si el nuevo valor es menor, actualizar el valor almacenado en Redis utilizando client.Do con una operación de tipo Set.
+	if currentValue > int64(value) {
+		// Actualizar el valor almacenado en Redis utilizando client.Do con una operación de tipo Set. Convertir el nuevo valor a una cadena utilizando strconv.FormatInt.
+		return client.Do(ctx, client.B().Set().Key(key).Value(strconv.FormatInt(int64(value), 10)).Build()).Error()
+	}
+
+	return nil
+}
+
+/* Función updateRanking
+* Grupo 2 — Sorted Sets (rankings): 2 operaciones
+ */
+func (c *Consumer) updateRanking(ctx context.Context, client valkey.Client, key string, member string, score int32) error {
+	// Actualizar el ranking utilizando client.Do con una operación de tipo ZAdd. Convertir el score a un float64 utilizando float64(score).
+	return client.Do(ctx, client.B().Zadd().Key(key).ScoreMember().ScoreMember(float64(score), member).Build()).Error()
 }
