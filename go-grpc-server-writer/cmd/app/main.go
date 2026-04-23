@@ -3,8 +3,10 @@ package main
 import (
 	"201905884_LAB_SO1_1S2026_PT3/go-grpc-server-writer/internal/server"
 	"201905884_LAB_SO1_1S2026_PT3/proto"
+	"fmt"
 	"log"
 	"net"
+	"os"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"google.golang.org/grpc"
@@ -16,8 +18,14 @@ import (
 * Esto porque si el puerto se abre antes de establecer la conexión a RabbitMQ, el servidor gRPC no podrá manejar las solicitudes entrantes correctamente, ya que no tendrá acceso a RabbitMQ para procesar los mensajes.
  */
 func main() {
+	// Leer variables de entorno para RabbitMQ
+	host := os.Getenv("RABBITMQ_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
 	// Coneccion a RabbitMQ
-	conn, err := amqp.Dial("amqp://guest:guest@locatehost:5672/")
+	conn, err := amqp.Dial(fmt.Sprintf("amqp://guest:guest@%s:5672/", host))
 	// Si falla importamos Panicf con err
 	if err != nil {
 		log.Fatalf("Faild to connect to RabbitMQ: %v", err)

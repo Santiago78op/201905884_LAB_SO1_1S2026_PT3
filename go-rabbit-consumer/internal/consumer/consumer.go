@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -18,6 +19,16 @@ type Consumer struct {
 	connection   *amqp.Connection
 	channel      *amqp.Channel
 	valkeyClient valkey.Client
+}
+
+/* Struct Reporte
+* Reporte es una estructura que representa un reporte de guerra con información sobre el país, el número de aviones en el aire y el número de barcos en el agua y el tiempo.
+ */
+type Reporte struct {
+	Country         string `json:"country"`
+	WarplanesInAir  int32  `json:"warplanesInAir"`
+	WarshipsInWater int32  `json:"warshipsInWater"`
+	Timestamp       string `json:"timestamp"`
 }
 
 /* Función NewConsumer
@@ -103,6 +114,18 @@ func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) {
 	c.updateRanking(ctx, c.valkeyClient, "rss_rank", req.Country.String(), req.WarplanesInAir)
 	c.updateRanking(ctx, c.valkeyClient, "cpu_rank", req.Country.String(), req.WarshipsInWater)
 
+	// Grupo 3 — Hash (modas): 2
+	c.updateModa(ctx, c.valkeyClient, "warplanes_in_air_moda", req.WarplanesInAir)
+	c.updateModa(ctx, c.valkeyClient, "warships_in_water_moda", req.WarshipsInWater)
+
+	// Cada Reporte que llega es una fotografia temporal
+	// Grupo 4 — List (serie temporal): 1
+	c.updateTimeSeries(ctx, &req)
+
+	// Grupo 5 — Contador país asignado (CHN): 1
+	if req.Country == proto.Countries_chn {
+		c.valkeyClient.Do(ctx, c.valkeyClient.B().Incr().Key("total_chn").Build())
+	}
 }
 
 /* Función updateMax
@@ -165,4 +188,40 @@ func (c *Consumer) updateMin(ctx context.Context, client valkey.Client, key stri
 func (c *Consumer) updateRanking(ctx context.Context, client valkey.Client, key string, member string, score int32) error {
 	// Actualizar el ranking utilizando client.Do con una operación de tipo ZAdd. Convertir el score a un float64 utilizando float64(score).
 	return client.Do(ctx, client.B().Zadd().Key(key).ScoreMember().ScoreMember(float64(score), member).Build()).Error()
+}
+
+/* Función updateModa
+* Grupo 3 — Hash (modas): 2 operaciones
+* Para implementar la función updateModa, se puede utilizar el comando HINCRBY de Redis para incrementar el contador de cada valor recibido. El campo del hash será el valor numérico convertido a una cadena, y el valor del campo será el contador que se incrementa cada vez que se recibe ese valor.
+ */
+func (c *Consumer) updateModa(ctx context.Context, client valkey.Client, key string, value int32) error {
+	// Convertir el valor numérico a una cadena utilizando strconv.FormatInt.
+	valueStr := strconv.FormatInt(int64(value), 10)
+
+	// Llamada a HINCRBY con increment
+	return client.Do(ctx, client.B().Hincrby().Key(key).Field(valueStr).Increment(1).Build()).Error()
+}
+
+/* Función updateTimeSeries
+* Grupo 4 — List (serie temporal): 1 operación
+* Se usa el struct Reporte para almacenar la información de cada reporte recibido. Cada vez que se recibe un nuevo reporte, se convierte a JSON y se inserta al frente de la lista utilizando LPUSH.
+ */
+func (c *Consumer) updateTimeSeries(ctx context.Context, req *proto.WarReportRequest) error {
+	// Crear una instancia de Reporte con la información del reporte recibido
+	reporte := Reporte{
+		Country:         req.Country.String(), // País asignado
+		WarplanesInAir:  req.WarplanesInAir,   // Número de aviones en el aire
+		WarshipsInWater: req.WarshipsInWater,  // Número de barcos en el agua (puede ser ajustado según la información disponible)
+		Timestamp:       req.Timestamp,        // Timestamp actual (puede ser ajustado según la información disponible)
+	}
+
+	// Convertir el reporte a JSON
+	reporteJSON, err := json.Marshal(reporte)
+	if err != nil {
+		return err
+	}
+
+	// Insertar el reporte al frente de la lista utilizando LPUSH
+	// El consumer tiene acceso a Valkey a través de c, y la key siempre es "meminfo"
+	return c.valkeyClient.Do(ctx, c.valkeyClient.B().Lpush().Key("meminfo").Element(string(reporteJSON)).Build()).Error()
 }
