@@ -13,6 +13,43 @@ Registro cronológico del avance por sesión de trabajo.
 
 ---
 
+## 2026-04-26 (sesión 6) — rust-api: implementación completa
+
+### Resumen
+Se implementó la rust-api completa desde cero en modo docente socrático. Compila sin errores ni warnings. El proxy HTTP recibe `POST /grpc-201905884` y reenvía al Go Client usando reqwest.
+
+### Lo que se hizo
+
+1. **Estructura modular con subdirectorios**
+   - `app/models/war_data.rs` — `pub struct WarData` con `Serialize`, `Deserialize`, `Debug`
+   - `app/routes/war_routes.rs` — handler `#[post("/grpc-201905884")]` con `web::Json<WarData>`
+   - `app/services/war_services.rs` — `forward_report`: reqwest POST a `go-client:8080`
+   - Cada subdirectorio tiene su `mod.rs` con `pub mod` y `pub use`
+
+2. **Decisiones técnicas aplicadas**
+   - `0.0.0.0:8080` para Kubernetes (no `127.0.0.1`)
+   - `match` en lugar de `.unwrap()` para manejo de errores controlado
+   - `crate::app::...` para rutas internas desde submódulos
+   - `data.into_inner()` para extraer `WarData` del wrapper de Actix
+
+3. **Conceptos SO1 trabajados**
+   - I/O no bloqueante: `async/await` sobre `epoll` del kernel via Tokio
+   - Separación de responsabilidades (bajo acoplamiento entre módulos)
+   - Sistema de módulos de Rust: `mod` registra, `use` abrevia, `pub use` re-exporta
+
+### Estado al cierre
+- `rust-api` — COMPLETO, compila sin errores
+- Pendiente: prueba con `cargo run` + curl, Dockerfile
+
+### Próxima sesión
+- Leer antes de comenzar: [[rust-api]]
+- Probar con curl el endpoint `/grpc-201905884`
+- Dockerfile rust-api: multi-stage, `rust:latest` → `debian:bookworm-slim`, `cargo build --release`, binario en `target/release/rust-api`
+- Dockerfiles Go services
+- `locust/` — script Python de carga
+
+---
+
 ## 2026-04-19 (sesión 2) — go-rabbit-consumer: estructura base + dependencias
 
 ### Resumen

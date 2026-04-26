@@ -205,3 +205,68 @@ async fn main() -> std::io::Result<()> {
 - `#[actix_web::main]` — convierte `main` en una función async usando Tokio internamente
 - `0.0.0.0:8080` — escucha en todas las interfaces; necesario en Kubernetes para recibir tráfico externo
 - `127.0.0.1` solo acepta conexiones del mismo host — inútil en un Pod
+
+# Toería: Problema en tamaños Rust Docker
+
+Cuando se compila Rust, se necesita:
+
+- El compilador de `rustc`
+- `cargo` para gestionar dependencias
+- Todas las dependencias del `Cargo.toml`
+- El código fuente completo
+
+Esto ocupa más de **1GB** solo para compilar. Pero tu aplicación final es **un binario de unos pocos MB**.
+
+Si esto se introduce en una imagen Docker, el resultado es una imagen de más de 1GB, lo cual es inaceptable para producción.
+
+Pero realemente si esto corre en Kubernetes, eso significaria que cada Pod tendría que descargar una imagen de 1GB cada vez que se escala, lo cual es un desastre.
+
+**Solución: Multi-stage builds** — se usa una imagen con Rust para compilar, y luego se copia solo el binario resultante a una imagen base mucho más ligera (como `alpine` o `scratch`). Esto reduce la imagen final a unos pocos MB.
+
+## Etapas de la Solución Multi-stage builds
+
+1. "builder": Tiene todo lo necesario para compilar el código Rust. Se instala Rust, se copia el código fuente, se ejecuta `cargo build --release` para generar el binario optimizado.
+
+2. "runtime": Es una imagen base mínima (como `alpine` o `scratch`) que solo contiene el binario compilado. Se copia el binario desde la etapa "builder" a esta imagen.
+
+### Etapa 1: Builder
+
+-- Que imagen usar para compilar Rust? La oficial de Rust: `rust:latest` o `rust:1.XX` (con la versión específica). Esta imagen ya tiene Rust y Cargo instalados.
+
+-- Que comando usar para compilar? `cargo build --release` genera un binario optimizado en `target/release/`.
+
+### Etapa 2: Runtime
+
+-- Imagen Base: `alpine` es común para aplicaciones Rust, pero si el binario no tiene dependencias dinámicas, se puede usar `scratch`, que es completamente vacía.
+
+-- Solo necesitas copiar el binario compilado desde la etapa "builder" a la etapa "runtime". Esto se hace con `COPY --from=builder /path/to/binary /app/`.
+
+## Alpine vs Debian para Rust:
+
+Por defecto, Rust compila binarios que enlazan contra **glibc** (la librería C del sistema). Alpine usa musl — una librería C diferente. Si copias un
+binario compilado con glibc a Alpine, no corre.
+
+Opciones:
+  - Usar debian:bookworm-slim — compatible con glibc, más seguro y simple
+  - Compilar con target x86_64-unknown-linux-musl — compatible con Alpine, pero más complejo
+
+Para este proyecto: debian:bookworm-slim es la elección correcta.
+
+Ahora escribe el Dockerfile en rust-api/Dockerfile. La estructura que necesitas:
+
+## Etapa 1
+FROM rust:... AS builder
+WORKDIR ...
+COPY ... .
+RUN cargo build --release
+
+## Etapa 2
+FROM debian:bookworm-slim
+COPY --from=builder .../rust-api /usr/local/bin/rust-api
+CMD [...]
+
+Tres preguntas que debes resolver para completarlo:
+
+1. ¿Qué copias al builder antes de compilar? (COPY . . copia todo el directorio)
+2. ¿Dónde queda el binario en el builder? El nombre del binario es el name del Cargo.toml
+3. ¿Qué comando inicia el servidor? (CMD)
