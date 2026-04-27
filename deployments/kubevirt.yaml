@@ -1,0 +1,117 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: valkey-vm
+  namespace: messaging
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: valkey-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 1Gi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:22.04
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              runcmd:
+                - apt-get update
+                - apt-get install -y valkey-server
+                - valkey-server --daemonize yes --bind 0.0.0.0
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey-service
+  namespace: messaging
+spec:
+  selector:
+    kubevirt.io/domain: valkey-vm
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: grafana-vm
+  namespace: messaging
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: grafana-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 1Gi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:22.04
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              runcmd:
+                - apt-get update
+                - apt-get install -y wget apt-transport-https software-properties-common
+                - wget -q -O - https://packages.grafana.com/gpg.key | apt-key add -
+                - add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+                - apt-get update
+                - apt-get install -y grafana
+                - systemctl enable grafana-server
+                - systemctl start grafana-server
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: messaging
+spec:
+  selector:
+    kubevirt.io/domain: grafana-vm
+  ports:
+    - port: 3000
+      targetPort: 3000
