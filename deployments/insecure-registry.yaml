@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: configure-insecure-registry
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: configure-insecure-registry
+  template:
+    metadata:
+      labels:
+        name: configure-insecure-registry
+    spec:
+      tolerations:
+        - operator: Exists
+      hostPID: true
+      initContainers:
+        - name: configure-registry
+          image: alpine
+          securityContext:
+            privileged: true
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /host/etc/containerd/certs.d/34.68.174.65:5000
+              cat > /host/etc/containerd/certs.d/34.68.174.65:5000/hosts.toml << 'EOF'
+              server = "http://34.68.174.65:5000"
+              [host."http://34.68.174.65:5000"]
+                capabilities = ["pull", "resolve"]
+                skip_verify = true
+              EOF
+              CONFIG=/host/etc/containerd/config.toml
+              if ! grep -q "config_path" "$CONFIG"; then
+                sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/a\          config_path = "/etc/containerd/certs.d"' "$CONFIG" || \
+                echo -e '\n[plugins."io.containerd.grpc.v1.cri".registry]\n  config_path = "/etc/containerd/certs.d"' >> "$CONFIG"
+              fi
+              nsenter --target 1 --mount --uts --ipc --net --pid -- systemctl restart containerd
+          volumeMounts:
+            - name: host-etc
+              mountPath: /host/etc
+            - name: host-run
+              mountPath: /run
+      containers:
+        - name: pause
+          image: gcr.io/google-containers/pause:3.1
+      volumes:
+        - name: host-etc
+          hostPath:
+            path: /etc
+        - name: host-run
+          hostPath:
+            path: /run

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: go-client
-          image: zot-registry:5000/go-client:latest
+          image: 34.68.174.65:5000/go-client:latest
           ports:
             - containerPort: 8080
           env:
@@ -53,7 +53,7 @@ spec:
     spec:
       containers:
         - name: go-server
-          image: zot-registry:5000/go-server:latest
+          image: 34.68.174.65:5000/go-server:latest
           ports:
             - containerPort: 50051
           env:
@@ -91,7 +91,7 @@ spec:
     spec:
       containers:
         - name: go-consumer
-          image: zot-registry:5000/go-consumer:latest
+          image: 34.68.174.65:5000/go-consumer:latest
           env:
             - name: RABBITMQ_HOST
               value: "rabbitmq"
