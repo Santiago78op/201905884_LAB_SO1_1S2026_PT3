@@ -1,0 +1,33 @@
+# Estapa de Builder
+# go version go1.26.2
+FROM golang:1.26.2 AS builder
+
+# Directorio raiz del proyecto
+WORKDIR /app
+
+# Copiar el proto compartido
+COPY /proto /app/proto/
+
+# Copiar el código del cliente Go
+COPY /go-api-grpc-client /app/go-api-grpc-client/
+
+# Entrar al directorio del cliente Go
+WORKDIR /app/go-api-grpc-client
+
+# Descargar las dependencias
+RUN go mod download
+
+# Compilar el binario
+RUN go build -o go-client ./cmd/app/
+
+# Etapa de runtime
+FROM alpine:3.21 AS runtime
+
+# Directorio donde vivirá el binario
+WORKDIR /app
+
+# Copiar binario compilado desde la etapa builder
+COPY --from=builder /app/go-api-grpc-client/go-client .
+
+# Ejecutar aplicación
+CMD ["./go-client"]
