@@ -109,35 +109,85 @@ exit
 > **IMPORTANTE:** La VM Debian es ARM64 pero los nodos GKE son AMD64.
 > Siempre usar `docker buildx` con `--platform linux/amd64`.
 
+### Prerequisitos (solo primera vez tras reinstalar el OS)
+
 ```bash
-# Configurar Docker para registry inseguro (solo primera vez)
+# 1. Instalar QEMU para emulación AMD64
+sudo apt-get install -y qemu-user-static binfmt-support
+
+# 2. Verificar que qemu-x86_64 está registrado
+ls /proc/sys/fs/binfmt_misc/ | grep qemu-x86_64
+
+# 3. Configurar Docker para registry inseguro
 echo '{"insecure-registries": ["34.68.174.65:5000"]}' | sudo tee /etc/docker/daemon.json
 sudo systemctl restart docker
 
-# Crear builder para AMD64 (solo primera vez)
-docker buildx create --use --name amd64builder
+# 4. Crear builder con soporte AMD64 y registry insecure
+mkdir -p ~/.docker/buildx
+cat > ~/.docker/buildx/buildkitd.toml << 'EOF'
+[registry."34.68.174.65:5000"]
+  http = true
+  insecure = true
+EOF
+docker buildx rm amd64builder 2>/dev/null || true
+docker buildx create --use --name amd64builder --config ~/.docker/buildx/buildkitd.toml
 docker buildx inspect --bootstrap
+# Verificar que "linux/amd64" aparece en Platforms
+```
 
+### Build y push
+
+```bash
 cd /home/julian/Documents/201905884_LAB_SO1_1S2026_PT3
 
-# Build y push directo a Zot (--push sube automáticamente)
+# Go services — usan QEMU (CGO_ENABLED=0 ya está en los Dockerfiles)
 docker buildx build --platform linux/amd64 -f Dockerfile.go-client   -t 34.68.174.65:5000/go-client:latest   --push .
 docker buildx build --platform linux/amd64 -f Dockerfile.go-server   -t 34.68.174.65:5000/go-server:latest   --push .
 docker buildx build --platform linux/amd64 -f Dockerfile.go-consumer -t 34.68.174.65:5000/go-consumer:latest --push .
+
+# Rust API — usa cross-compilación nativa (QEMU crashea con rustc)
+# rust-api/Dockerfile ya tiene --platform=$BUILDPLATFORM + target x86_64-unknown-linux-gnu
 docker buildx build --platform linux/amd64 -f rust-api/Dockerfile    -t 34.68.174.65:5000/rust-api:latest    --push rust-api/
 
 # Verificar imágenes en Zot
 curl http://34.68.174.65:5000/v2/_catalog
+# Debe mostrar: {"repositories":["go-client","go-consumer","go-server","rust-api"]}
 ```
 
 ---
 
 ## Paso 8 — Configurar registry inseguro en nodos GKE
 
+> **IMPORTANTE:** El DaemonSet `insecure-registry.yaml` NO funciona correctamente en GKE.
+> GKE usa `mirrors` en containerd y el enfoque `config_path` es incompatible.
+> Configurar manualmente vía SSH en cada nodo.
+
 ```bash
-kubectl apply -f deployments/insecure-registry.yaml
-kubectl get pods -n kube-system -l name=configure-insecure-registry
+# Obtener nombre del nodo
+kubectl get nodes
+
+# SSH al nodo (reemplazar <NOMBRE_NODO> con el nombre real)
+gcloud compute ssh <NOMBRE_NODO> --zone us-east1-b --project mumk8s
 ```
+
+Dentro del nodo, ejecutar:
+
+```bash
+# Agregar mirror para Zot (HTTP inseguro)
+sudo sed -i '/endpoint = \["https:\/\/mirror\.gcr\.io","https:\/\/registry-1\.docker\.io"\]/a\\n[plugins."io.containerd.grpc.v1.cri".registry.mirrors."34.68.174.65:5000"]\n  endpoint = ["http://34.68.174.65:5000"]\n\n[plugins."io.containerd.grpc.v1.cri".registry.configs."34.68.174.65:5000".tls]\n  insecure_skip_verify = true' /etc/containerd/config.toml
+
+# Verificar que quedó
+grep -A 3 "34.68.174.65" /etc/containerd/config.toml
+
+# Reiniciar containerd
+sudo systemctl restart containerd
+sudo systemctl is-active containerd
+
+# Salir del nodo
+exit
+```
+
+> **CRÍTICO:** NO usar `config_path` en `config.toml` — conflicta con `mirrors` de GKE y crashea containerd.
 
 ---
 
@@ -152,6 +202,8 @@ kubectl apply -f deployments/gateway.yaml
 kubectl apply -f deployments/kubevirt.yaml
 ```
 
+> Después de aplicar kubevirt.yaml, esperar 4-5 minutos para que las VMs terminen cloud-init (instalación de redis-server y grafana).
+
 ---
 
 ## Paso 10 — Verificar el sistema completo
@@ -160,17 +212,37 @@ kubectl apply -f deployments/kubevirt.yaml
 # Pods en todos los namespaces
 kubectl get pods -A
 
+# VMs KubeVirt (esperar Running True en ambas)
+kubectl get vm -n messaging
+kubectl get vmi -n messaging
+
 # HPA
 kubectl get hpa -n military-pipeline
 
-# VMs KubeVirt
-kubectl get vm -n messaging
-
-# IP pública del Gateway
+# IP pública del Gateway (esperar PROGRAMMED=True)
 kubectl get gateway -n military-pipeline
 
-# Logs del consumer
-kubectl logs -l app=go-consumer -n messaging -f
+# Forzar restart de deployments para limpiar estados viejos
+kubectl rollout restart deployment/go-client deployment/go-server deployment/rust-api -n military-pipeline
+kubectl rollout restart deployment/go-consumer -n messaging
+```
+
+---
+
+## Paso 11 — Probar el pipeline completo
+
+```bash
+# Reemplazar <GATEWAY_IP> con la IP del kubectl get gateway
+curl -X POST http://<GATEWAY_IP>/grpc-201905884 \
+  -H "Content-Type: application/json" \
+  -d '{"country":"CHN","warplanes_in_air":42,"warships_in_water":14,"timestamp":"2026-04-28T02:00:00Z"}'
+# Debe responder: Report forwarded successfully
+
+# Verificar datos en Valkey
+kubectl port-forward svc/valkey-service 6379:6379 -n messaging &
+redis-cli -h 127.0.0.1 -p 6379 keys '*'
+# Debe mostrar las 10 keys: meminfo, rss_rank, cpu_rank, max/min warplanes/warships, modas, total_chn
+kill %1  # Matar el port-forward
 ```
 
 ---
@@ -194,7 +266,14 @@ gcloud container clusters delete mumk8s-cluster --zone us-east1-b --project mumk
 | Error | Causa | Solución |
 |---|---|---|
 | `Quota SSD_TOTAL_GB exceeded` | Cuota SSD agotada | `--disk-type pd-standard --disk-size 50` |
+| `Quota CPUS_ALL_REGIONS exceeded` | Zot VM usa 1 CPU, máximo 2 nodos n2-standard-4 | Usar `--num-nodes 2 --max-nodes 3` |
 | `GCE_STOCKOUT` | Sin VMs disponibles en la zona | Cambiar zona |
 | KubeVirt job `Pending` | GKE no expone control-plane | `kubectl label node <nodo> node-role.kubernetes.io/control-plane=""` |
 | `Gateway API CRDs not found` | Gateway API no habilitado | `gcloud container clusters update ... --gateway-api=standard` |
-| Docker pull falla en nodos | Registry inseguro no configurado | Aplicar `insecure-registry.yaml` |
+| `exec ./go-client: no such file or directory` | CGO habilitado, binario linkado a glibc, Alpine usa musl | `CGO_ENABLED=0` ya en Dockerfiles |
+| `http: server gave HTTP response to HTTPS client` (buildx push) | BuildKit no tiene config de registry insecure | Crear `~/.docker/buildx/buildkitd.toml` y recrear builder |
+| `config_path cannot be set when mirrors is provided` | Conflicto en containerd config | Usar `mirrors` vía SSH, nunca `config_path` |
+| `no healthy upstream` en Gateway | GKE health check falla (no hay GET /) | rust-api ya tiene `GET /` que retorna 200 |
+| Valkey VM en `Pending` eternamente | Estado inconsistente | `kubectl delete vm valkey-vm -n messaging && kubectl apply -f deployments/kubevirt.yaml` |
+| go-consumer `CrashLoopBackOff: connection refused` | Valkey VM aún en cloud-init | Esperar 4-5 min y hacer `kubectl rollout restart deployment/go-consumer -n messaging` |
+| Go services sin logs | Normal — el código no tiene log.Printf | Verificar datos con `redis-cli keys '*'` vía port-forward |

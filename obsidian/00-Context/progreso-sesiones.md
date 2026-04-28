@@ -1,7 +1,7 @@
 ---
 title: Progreso de Sesiones — Pegasus
 created: 2026-04-14
-updated: 2026-04-19 (sesión 2)
+updated: 2026-04-27 (sesión 10)
 tags: [progreso, sesiones, contexto]
 status: activo
 project: pegasus
@@ -10,6 +10,71 @@ project: pegasus
 # Progreso de Sesiones
 
 Registro cronológico del avance por sesión de trabajo.
+
+---
+
+## 2026-04-27 (sesión 10) — Imágenes AMD64 resueltas, clúster GKE recreando
+
+### Resumen
+Se resolvió el problema crítico de ImagePullBackOff causado por arquitectura ARM64/AMD64. Las 4 imágenes fueron reconstruidas para linux/amd64 y pusheadas a Zot. El clúster GKE fue encontrado eliminado (se había borrado entre sesiones para ahorrar crédito) y se inició su recreación al cierre de sesión.
+
+### Lo que se hizo
+
+1. **Diagnóstico y resolución ARM64 → AMD64**
+   - Causa raíz: VM Debian del estudiante es ARM64, nodos GKE son AMD64
+   - Instalado `qemu-user-static` + `binfmt-support` para habilitar emulación AMD64
+   - Configurado `~/.docker/buildx/buildkitd.toml` con registry insecure para Zot
+   - Recreado builder `amd64builder` con soporte multi-plataforma
+
+2. **rust-api/Dockerfile actualizado para cross-compilación**
+   - QEMU no puede emular `rustc` estable (SIGSEGV)
+   - Solución: `FROM --platform=$BUILDPLATFORM rust:1.95.0` — build stage corre nativo en ARM64
+   - Instala `gcc-x86-64-linux-gnu` y target `x86_64-unknown-linux-gnu`
+   - Compila con `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc cargo build --release --target x86_64-unknown-linux-gnu`
+   - Binario en `/app/target/x86_64-unknown-linux-gnu/release/rust-api`
+
+3. **4 imágenes AMD64 en Zot**
+   - `34.68.174.65:5000/go-client:latest` ✅
+   - `34.68.174.65:5000/go-server:latest` ✅
+   - `34.68.174.65:5000/go-consumer:latest` ✅
+   - `34.68.174.65:5000/rust-api:latest` ✅
+
+### Estado al cierre FINAL — sesión 10 completa
+
+| Componente | Estado |
+|---|---|
+| Clúster GKE | RUNNING (us-east1-b, 2 × n2-standard-4) |
+| KubeVirt | Deployed v1.3.0 |
+| Gateway API | PROGRAMMED — IP: **34.160.99.82** |
+| RabbitMQ | Running |
+| KubeVirt VM Grafana | Running |
+| KubeVirt VM Valkey (redis-server) | Running |
+| rust-api + go-client + go-server + go-consumer | Running 1/1 todos |
+| **Pipeline E2E** | **VERIFICADO** — 10 keys en Valkey ✅ |
+| Grafana dashboards | **PENDIENTE** — próxima sesión |
+| VM Zot | RUNNING (34.68.174.65:5000) |
+
+### Lecciones críticas consolidadas (en setup-guide.md Paso 7, 8, errores conocidos)
+
+1. **CGO_ENABLED=0** — Go + Alpine requiere binario estático
+2. **Containerd mirrors vía SSH** — nunca `config_path`, crashea containerd GKE
+3. **Rust cross-compilación** — QEMU no puede emular rustc
+4. **Cuota CPUs: máximo 2 nodos** — Zot VM usa 1 de los 12 disponibles
+5. **KubeVirt label control-plane** — job queda Pending sin él
+6. **rust-api GET /** — GKE Gateway necesita health endpoint 200 OK
+7. **redis-server no valkey-server** — Ubuntu 22.04 no tiene valkey en repos
+8. **Valkey VM Pending** — delete + recrear si queda atascada
+9. **go-consumer esperar cloud-init** — 4-5 min antes de restart
+
+### Próxima sesión — SOLO FALTA GRAFANA + LOCUST
+
+**LEER `deployments/setup-guide.md` PRIMERO si se recreó el clúster.**
+
+1. `kubectl get pods -A` — verificar Running
+2. Acceder a Grafana: `kubectl port-forward svc/grafana-service 3000:3000 -n messaging` → http://localhost:3000 (admin/admin)
+3. Configurar 11 paneles — ver `04-Observabilidad/` en Obsidian y `memory/grafana_requirements.md`
+4. Correr Locust: `cd locust && locust -f locustfile.py --host http://34.160.99.82`
+5. Capturar screenshots de evidencia para entrega (deadline 30/04/2026)
 
 ---
 

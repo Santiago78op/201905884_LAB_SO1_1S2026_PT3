@@ -18,7 +18,7 @@ WORKDIR /app/go-grpc-server-writer
 RUN go mod download
 
 # Compilar el binario
-RUN go build -o go-server ./cmd/app/
+RUN CGO_ENABLED=0 go build -o go-server ./cmd/app/
 
 # Etapa de runtime
 FROM alpine:3.21 AS runtime

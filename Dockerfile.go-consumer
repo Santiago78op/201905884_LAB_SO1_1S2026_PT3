@@ -18,7 +18,7 @@ WORKDIR /app/go-rabbit-consumer
 RUN go mod download
 
 # Compilar el binario
-RUN go build -o go-consumer ./cmd/app/
+RUN CGO_ENABLED=0 go build -o go-consumer ./cmd/app/
 
 # Etapa de runtime
 FROM alpine:3.21 AS runtime

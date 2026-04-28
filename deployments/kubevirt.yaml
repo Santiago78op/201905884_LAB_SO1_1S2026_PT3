@@ -25,6 +25,8 @@ spec:
           interfaces:
             - name: default
               masquerade: {}
+              ports:
+                - port: 6379
       networks:
         - name: default
           pod: {}
@@ -38,8 +40,9 @@ spec:
               #cloud-config
               runcmd:
                 - apt-get update
-                - apt-get install -y valkey-server
-                - valkey-server --daemonize yes --bind 0.0.0.0
+                - apt-get install -y redis-server
+                - sed -i 's/bind 127.0.0.1/bind 0.0.0.0/' /etc/redis/redis.conf
+                - systemctl restart redis-server
 
 ---
 apiVersion: v1
