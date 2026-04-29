@@ -1,7 +1,7 @@
 ---
 title: Dashboards Grafana — Requisitos del Proyecto
 created: 2026-04-05
-updated: 2026-04-05
+updated: 2026-04-29
 tags: [grafana, dashboards, observabilidad, valkey]
 status: activo
 ---
@@ -48,20 +48,24 @@ status: activo
 [# CARNET]
 ```
 
-## Estructuras Valkey Sugeridas
+## Estructuras Valkey Reales (verificadas sesión 13 — 2026-04-29)
 
-Para soportar estos paneles, el Consumer debe escribir en Valkey:
+Keys confirmadas en Valkey:
 
 ```
-ZINCRBY warplanes_rank <valor> <country>   # ranking aviones por país
-ZINCRBY warships_rank <valor> <country>    # ranking barcos por país
-SET warplanes_max <valor>                  # máximo global aviones
-SET warplanes_min <valor>                  # mínimo global aviones
-SET warships_max <valor>                   # máximo global barcos
-SET warships_min <valor>                   # mínimo global barcos
-LPUSH <country>_timeseries <json>          # serie temporal por país
-INCR <country>_total                       # contador de reportes por país
+ZINCRBY rss_rank <valor> <country>          # ranking aviones por país
+ZINCRBY cpu_rank <valor> <country>          # ranking barcos por país
+SET max_warplanes_in_air <valor>            # máximo global aviones
+SET min_warplanes_in_air <valor>            # mínimo global aviones
+SET max_warships_in_water <valor>           # máximo global barcos
+SET min_warships_in_water <valor>           # mínimo global barcos
+HINCRBY warplanes_in_air_moda <val> 1       # moda aviones
+HINCRBY warships_in_water_moda <val> 1      # moda barcos
+LPUSH meminfo <json>                        # serie temporal (toda la pipeline)
+INCR total_chn                              # contador reportes CHN
 ```
+
+Datos verificados: `rss_rank` contiene `esp` con score `42`.
 
 ## Nota de Penalización
 

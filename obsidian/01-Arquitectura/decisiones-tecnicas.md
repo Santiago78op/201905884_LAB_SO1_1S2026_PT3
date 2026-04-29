@@ -1,7 +1,7 @@
 ---
 title: Decisiones Técnicas
 created: 2026-04-05
-updated: 2026-04-05
+updated: 2026-04-28
 tags: [arquitectura, decisiones, tecnologia]
 status: activo
 ---
@@ -12,7 +12,7 @@ status: activo
 
 | Tecnología | Decisión | Justificación |
 |---|---|---|
-| **GKE** | Clúster con instancias N1 en GCP | Requisito del proyecto (-80% sin GKE) |
+| **GKE** | Clúster con instancias `n2-standard-4` (x86/AMD64) en GCP | Requisito del proyecto (-80% sin GKE). N4A ARM64 descartado — GCP no expone FEAT_NV en ARM64, sin nested virt no hay /dev/kvm y KubeVirt no funciona. |
 | **Kubernetes Gateway API** | Reemplaza Ingress Controller | Requisito explícito del enunciado |
 | **Rust** | API REST (Actix-Web o Axum) | Alto rendimiento, manejo de alta concurrencia |
 | **Go** | 3 Deployments (gRPC Client + 2x Server/Writer) | Concurrencia nativa, ecosistema gRPC maduro |

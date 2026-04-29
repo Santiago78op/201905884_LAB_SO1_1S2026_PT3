@@ -1,6 +1,6 @@
 # Estapa de Builder
 # go version go1.26.2
-FROM golang:1.26.2 AS builder
+FROM --platform=linux/amd64 golang:1.26.2 AS builder
 
 # Directorio raiz del proyecto
 WORKDIR /app
@@ -21,7 +21,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 go build -o go-consumer ./cmd/app/
 
 # Etapa de runtime
-FROM alpine:3.21 AS runtime
+FROM --platform=linux/amd64 alpine:3.21 AS runtime
 
 # Directorio donde vivirá el binario
 WORKDIR /app
