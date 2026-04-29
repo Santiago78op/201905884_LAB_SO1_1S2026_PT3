@@ -1,8 +1,0 @@
-[project]
-name = "mumk8s-validator"
-version = "0.1.0"
-description = "Multi-agent validation system for M.U.M.N.K8s project"
-requires-python = ">=3.11"
-dependencies = [
-    "anthropic>=0.40.0",
-]
