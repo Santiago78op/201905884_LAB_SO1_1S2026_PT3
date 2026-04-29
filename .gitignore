@@ -1,0 +1,11 @@
+# .claude
+.claude/
+
+# agentes
+agents/
+
+# obsidian
+obsidian/
+
+# calude md
+CLAUDE.md
