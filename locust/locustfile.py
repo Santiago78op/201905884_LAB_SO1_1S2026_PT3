@@ -9,10 +9,12 @@ class WarReportUser(HttpUser):
 
     @task
     def send_war_report(self):
+        minValuRange = random.randint(25, 100)
+        maxValuRange = random.randint(1000, 3200)
         payload = {
             "country": random.choice(["USA", "RUS", "CHN", "ESP", "GTM"]),
-            "warplanes_in_air": random.randint(0, 50),
-            "warships_in_water": random.randint(0, 30),
+            "warplanes_in_air": random.randint(minValuRange, maxValuRange),
+            "warships_in_water": random.randint(minValuRange, maxValuRange),
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }
 

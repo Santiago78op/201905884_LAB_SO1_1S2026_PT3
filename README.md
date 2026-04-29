@@ -74,7 +74,7 @@ Estructura exacta que Locust envía al sistema:
 }
 ```
 
-**Rangos:** `warplanes_in_air`: 0–50 | `warships_in_water`: 0–30
+**Rangos:** `warplanes_in_air`: random(25–100) a random(1000–3200) | `warships_in_water`: igual
 **Países válidos:** USA, RUS, CHN, ESP, GTM
 
 ---
@@ -310,19 +310,16 @@ El `go-consumer` escribe las siguientes keys:
 | `min_warplanes_in_air` | String | Mínimo global de aviones en aire |
 | `max_warships_in_water` | String | Máximo global de barcos en agua |
 | `min_warships_in_water` | String | Mínimo global de barcos en agua |
-| `rss_rank` | Sorted Set | Ranking de países por warplanes |
-| `cpu_rank` | Sorted Set | Ranking de países por warships |
-| `warplanes_in_air_moda` | Hash | Moda de warplanes por país |
-| `warships_in_water_moda` | Hash | Moda de warships por país |
-| `meminfo` | List | Historial de reportes (time series) |
+| `rss_rank` | Sorted Set | Ranking acumulado de países por warplanes (ZINCRBY) |
+| `cpu_rank` | Sorted Set | Ranking acumulado de países por warships (ZINCRBY) |
+| `warplanes_in_air_moda` | Hash | Distribución de frecuencias de warplanes |
+| `warplanes_in_air_moda_winner` | String | Valor de moda actual de warplanes |
+| `warplanes_in_air_moda_winner_count` | String | Conteo del valor ganador de warplanes |
+| `warships_in_water_moda` | Hash | Distribución de frecuencias de warships |
+| `warships_in_water_moda_winner` | String | Valor de moda actual de warships |
+| `warships_in_water_moda_winner_count` | String | Conteo del valor ganador de warships |
+| `meminfo` | List | Serie temporal de reportes CHN (JSON) |
 | `total_chn` | String (counter) | Total de reportes del país asignado (CHN) |
-
-**Consultas de Grafana:**
-```
-ZREVRANGE rss_rank 0 4 WITHSCORES
-ZREVRANGE cpu_rank 0 4 WITHSCORES
-LRANGE meminfo 0 -1
-```
 
 ---
 
@@ -330,19 +327,19 @@ LRANGE meminfo 0 -1
 
 11 paneles obligatorios configurados con Valkey como data source:
 
-| # | Panel | Key Valkey |
-|---|---|---|
-| 1 | Max Warplanes in Air | `max_warplanes_in_air` |
-| 2 | Min Warplanes in Air | `min_warplanes_in_air` |
-| 3 | Max Warships in Water | `max_warships_in_water` |
-| 4 | Min Warships in Water | `min_warships_in_water` |
-| 5 | Top Countries — Warplanes | `rss_rank` (ZREVRANGE) |
-| 6 | Top Countries — Warships | `cpu_rank` (ZREVRANGE) |
-| 7 | Mode Warplanes in Air | `warplanes_in_air_moda` |
-| 8 | Mode Warships in Water | `warships_in_water_moda` |
-| 9 | País asignado (CHN) | — |
-| 10 | Total Reports CHN | `total_chn` |
-| 11 | Time Series CHN | `meminfo` |
+| # | Panel | Visualización | Key Valkey | Comando |
+|---|---|---|---|---|
+| 1 | Max Warplanes in Air | Stat | `max_warplanes_in_air` | GET |
+| 2 | Min Warplanes in Air | Stat | `min_warplanes_in_air` | GET |
+| 3 | Max Warships in Water | Stat | `max_warships_in_water` | GET |
+| 4 | Min Warships in Water | Stat | `min_warships_in_water` | GET |
+| 5 | Top Countries — Warplanes | Bar chart | `rss_rank` | ZRANGE Index 0 -1 |
+| 6 | Top Countries — Warships | Bar chart | `cpu_rank` | ZRANGE Index 0 -1 |
+| 7 | Mode Warplanes in Air | Stat | `warplanes_in_air_moda_winner` | GET |
+| 8 | Mode Warships in Water | Stat | `warships_in_water_moda_winner` | GET |
+| 9 | País asignado (CHN) | Text | — | Texto fijo |
+| 10 | Total Reports CHN | Stat | `total_chn` | GET |
+| 11 | Time Series CHN | Time series | `meminfo` | LRANGE 0 99 + Extract fields JSON |
 
 ---
 
@@ -383,7 +380,7 @@ Acceder a la UI de Locust en `http://localhost:8089` y configurar:
 - **Number of users:** 100 (recomendado para activar HPA)
 - **Spawn rate:** 10 usuarios/segundo
 
-El script genera payloads con país aleatorio (USA, RUS, CHN, ESP, GTM), warplanes (0–50), warships (0–30) y timestamp ISO 8601.
+El script genera payloads con país aleatorio (USA, RUS, CHN, ESP, GTM), warplanes y warships con rango `random(25–100)` a `random(1000–3200)`, y timestamp ISO 8601.
 
 ---
 

@@ -69,6 +69,15 @@ status: activo
 - `messaging` — RabbitMQ, Consumer
 - `monitoring` — referencias a VMs KubeVirt
 
+## Estado del Sistema (2026-04-29 sesión 14)
+
+Todo el pipeline E2E está RUNNING. Gateway IP: `34.102.175.55`.
+- Locust instalado (pipx v2.43.4) — corre desde máquina local contra Gateway
+- HPA verificado: CPU 15%→43% con 200 usuarios, réplicas 1→2
+- 11 paneles Grafana creados — ver `dashboards-grafana.md` para estado detallado
+- Locust rangos en ajuste (evitar min=0)
+- Pendiente: fixes Grafana + evidencia final + entrega (deadline 30/04/2026)
+
 ## Conexiones
 
 - [[flujo-de-datos]]

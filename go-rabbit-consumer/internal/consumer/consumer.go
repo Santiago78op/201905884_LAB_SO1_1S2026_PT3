@@ -120,7 +120,9 @@ func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) {
 
 	// Cada Reporte que llega es una fotografia temporal
 	// Grupo 4 — List (serie temporal): 1
-	c.updateTimeSeries(ctx, &req)
+	if req.Country == proto.Countries_chn {
+		c.updateTimeSeries(ctx, &req)
+	}
 
 	// Grupo 5 — Contador país asignado (CHN): 1
 	if req.Country == proto.Countries_chn {
@@ -186,8 +188,9 @@ func (c *Consumer) updateMin(ctx context.Context, client valkey.Client, key stri
 * Grupo 2 — Sorted Sets (rankings): 2 operaciones
  */
 func (c *Consumer) updateRanking(ctx context.Context, client valkey.Client, key string, member string, score int32) error {
-	// Actualizar el ranking utilizando client.Do con una operación de tipo ZAdd. Convertir el score a un float64 utilizando float64(score).
-	return client.Do(ctx, client.B().Zadd().Key(key).ScoreMember().ScoreMember(float64(score), member).Build()).Error()
+	// ZADD lo que hace es que guarda el ultimo score, pero necesito la suma total de los scores
+	// Para ello uso ZINCRBY que incrementa el score de un miembro en el sorted set.
+	return client.Do(ctx, client.B().Zincrby().Key(key).Increment(float64(score)).Member(member).Build()).Error()
 }
 
 /* Función updateModa
@@ -198,8 +201,41 @@ func (c *Consumer) updateModa(ctx context.Context, client valkey.Client, key str
 	// Convertir el valor numérico a una cadena utilizando strconv.FormatInt.
 	valueStr := strconv.FormatInt(int64(value), 10)
 
-	// Llamada a HINCRBY con increment
-	return client.Do(ctx, client.B().Hincrby().Key(key).Field(valueStr).Increment(1).Build()).Error()
+	// Incrementar el contador del valor recibido
+	valueIncremente := client.Do(ctx, client.B().Hincrby().Key(key).Field(valueStr).Increment(1).Build())
+
+	// Validar si hay error
+	if valueIncremente.Error() != nil {
+		return valueIncremente.Error()
+	}
+
+	// Obtener el conteo actual de ese valor después del incremento
+	currentCount, err := valueIncremente.AsInt64()
+	if err != nil {
+		return err
+	}
+
+	// Comparar con el conteo alamacenado en la key ganadora
+	winnerCountResult := client.Do(ctx, client.B().Get().Key(key+"_winner_count").Build())
+	winnerCount, err := winnerCountResult.AsInt64()
+	if err != nil && !valkey.IsValkeyNil(err) {
+		return err
+	}
+
+	// Si el nuevo conteo es mayor, procedo a actualizar la key ganadora con el nuevo valor y su conteo
+	if currentCount > winnerCount {
+		// Actualizar la key ganadora con el nuevo valor y su conteo
+		err := client.Do(ctx, client.B().Set().Key(key+"_winner").Value(valueStr).Build()).Error()
+		if err != nil {
+			return err
+		}
+		err = client.Do(ctx, client.B().Set().Key(key+"_winner_count").Value(strconv.FormatInt(currentCount, 10)).Build()).Error()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 /* Función updateTimeSeries

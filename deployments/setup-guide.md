@@ -41,6 +41,27 @@ Un contenedor empaqueta un binario + sus dependencias. Ese binario contiene inst
 
 KubeVirt extiende Kubernetes para correr **máquinas virtuales** como recursos nativos del clúster. Permite que Valkey y Grafana corran en VMs completas (con su propio kernel) en lugar de contenedores. Requiere **virtualización anidada** en los nodos — solo disponible en GKE con nodos x86 y `UBUNTU_CONTAINERD`.
 
+### ¿Qué es la Moda y cómo se calcula en el Consumer?
+
+La **moda estadística** es el valor que aparece con mayor frecuencia en un conjunto de datos.
+
+El Consumer implementa la moda en dos capas en Valkey:
+
+**Capa 1 — Distribución de frecuencias (Hash):**
+Cada vez que llega un reporte con `warplanes_in_air = 42`, se ejecuta `HINCRBY warplanes_in_air_moda 42 1`. El Hash acumula cuántas veces apareció cada valor numérico:
+```
+warplanes_in_air_moda → {"42": 15, "87": 3, "1500": 8, ...}
+```
+
+**Capa 2 — Valor ganador actual (String):**
+Después de cada incremento, el Consumer compara el conteo del valor recibido contra el conteo del ganador anterior. Si supera al ganador, actualiza dos keys:
+- `warplanes_in_air_moda_winner` → el valor con mayor frecuencia (ej: `"42"`)
+- `warplanes_in_air_moda_winner_count` → su conteo actual (ej: `"15"`)
+
+Grafana lee únicamente `_winner` con un `GET` simple — sin EVAL LUA ni procesamiento en el lado de Grafana.
+
+**¿Por qué no calcular la moda en Grafana?** Grafana es una capa de visualización. La lógica de negocio (quién gana) pertenece al Consumer. Si el cálculo estuviera en Grafana, cualquier cambio en el datasource rompería el panel. Al guardar el resultado en Valkey, Grafana solo lee un valor ya procesado.
+
 ### ¿Qué es Gateway API?
 
 Gateway API es la evolución de Ingress en Kubernetes. Define recursos (`Gateway`, `HTTPRoute`) para exponer servicios al exterior con mayor expresividad. GKE tiene soporte nativo pero requiere dos pasos: instalar los CRDs upstream y habilitar el feature en el clúster con `--gateway-api=standard`.
@@ -439,11 +460,81 @@ Data source configurado: Redis → `<VALKEY_VM_IP>:6379` (sin contraseña)
 | 4 | Min Warships in Water | Stat | String | `min_warships_in_water` | GET |
 | 5 | Top Countries Warplanes | Bar/Table | Sorted Set | `rss_rank` | ZREVRANGE 0 4 WITH SCORES |
 | 6 | Top Countries Warships | Bar/Table | Sorted Set | `cpu_rank` | ZREVRANGE 0 4 WITH SCORES |
-| 7 | Mode Warplanes | Table | Hash | `warplanes_in_air_moda` | HGETALL |
-| 8 | Mode Warships | Table | Hash | `warships_in_water_moda` | HGETALL |
+| 7 | Mode Warplanes | Stat | String | `warplanes_in_air_moda_winner` | GET |
+| 8 | Mode Warships | Stat | String | `warships_in_water_moda_winner` | GET |
 | 9 | Info País CHN | Stat | String | `total_chn` | GET |
 | 10 | Total Reports CHN | Stat | String | `total_chn` | GET |
 | 11 | Time Series CHN | Table/Log | List | `meminfo` | LRANGE 0 -1 |
+
+---
+
+## Levantar Grafana (cada sesión)
+
+**¿Por qué port-forward?** Grafana corre en la VM KubeVirt dentro del clúster sin IP pública. El port-forward crea un túnel desde tu máquina local al Service de Kubernetes.
+
+```bash
+kubectl port-forward -n messaging service/grafana-service 3000:3000
+```
+
+Abrir en el navegador: `http://localhost:3000`
+- Usuario: `admin`
+- Contraseña: `admin123`
+
+> Si Grafana no responde, la VM KubeVirt se reinició. Aplicar fix manual (Paso 11).
+
+---
+
+## Levantar Locust (cada sesión de prueba)
+
+**¿Por qué Locust?** Genera tráfico HTTP simulando múltiples usuarios concurrentes hacia el Gateway. Es la herramienta de load testing del proyecto.
+
+```bash
+cd /home/julian/Documents/201905884_LAB_SO1_1S2026_PT3/locust
+
+# Interfaz web (recomendado para control manual)
+locust -f locustfile.py --host http://34.102.175.55
+
+# Sin interfaz — headless con parámetros fijos
+locust -f locustfile.py --host http://34.102.175.55 --headless -u 100 -r 10
+# -u: número de usuarios
+# -r: usuarios nuevos por segundo (spawn rate)
+```
+
+Abrir interfaz Locust: `http://localhost:8089`
+
+Rangos actuales de datos generados:
+- `warplanes_in_air`: `random(random(25,100), random(1000,3200))`
+- `warships_in_water`: igual al anterior
+
+> Para el HPA: arrancar con 100+ usuarios sostenidos. El CPU del rust-api debe superar 30% para escalar de 1 → 2 → 3 réplicas.
+
+---
+
+## Limpiar datos de Valkey (antes de nueva corrida)
+
+**¿Por qué?** Borra datos de corridas anteriores para que los paneles de Moda, Min y Max reflejen únicamente los datos actuales.
+
+```bash
+kubectl run redis-flush --image=redis:alpine --rm -it --restart=Never -- redis-cli -h 10.64.129.9 FLUSHALL
+# Respuesta esperada: OK
+```
+
+---
+
+## Redesplegar go-consumer (después de cambios de código)
+
+```bash
+# 1. Rebuild y push
+cd /home/julian/Documents/201905884_LAB_SO1_1S2026_PT3
+docker buildx build --platform linux/amd64 -f Dockerfile.go-consumer -t 34.68.174.65:5000/go-consumer:latest --push .
+
+# 2. Forzar rollout con nueva imagen
+kubectl rollout restart deployment/go-consumer -n messaging
+
+# 3. Verificar
+kubectl rollout status deployment/go-consumer -n messaging
+kubectl get pods -n messaging | grep consumer
+```
 
 ---
 
@@ -480,3 +571,26 @@ gcloud container clusters delete mumk8s-cluster --zone us-east1-b --project mumk
 | `exec format error` en nodos | Imagen ARM64 en nodo AMD64 | Reconstruir con `--platform linux/amd64` |
 | KubeVirt no puede crear VMs / sin `/dev/kvm` | Nodos ARM64 (N4A) no soportan nested virt | Usar nodos x86 (n2-standard-4) |
 | go-consumer `CrashLoopBackOff` | Valkey VM aún en cloud-init | Esperar 4-5 min y `kubectl rollout restart deployment/go-consumer -n messaging` |
+
+## Comandos
+
+Eliminar data en Valkey
+```bash
+kubectl run redis-flush --image=redis:alpine --rm -it --restart=Never -- redis-cli -h 10.64.129.9 FLUSHALL
+```
+
+## Comandos para rebuild y redeploy del go-consumer después de cambios de código
+
+```bash
+# 1. Rebuild y push a Zot
+cd /home/julian/Documents/201905884_LAB_SO1_1S2026_PT3
+
+docker buildx build --platform linux/amd64 -f Dockerfile.go-consumer -t 34.68.174.65:5000/go-consumer:latest --push .
+  
+# 2. Forzar redespliegue                                  
+kubectl rollout restart deployment/go-consumer -n messaging
+
+# 3. Verificar
+kubectl rollout status deployment/go-consumer -n messaging 
+kubectl get pods -n messaging | grep consumer
+```
