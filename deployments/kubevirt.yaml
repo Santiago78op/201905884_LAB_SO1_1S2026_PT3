@@ -1,0 +1,152 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: valkey-vm
+  namespace: messaging
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: valkey-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 1Gi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+              ports:
+                - port: 6379
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:22.04
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              users:
+                - name: ubuntu
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  shell: /bin/bash
+                  lock_passwd: false
+                  plain_text_passwd: 'ubuntu'
+
+              ssh_pwauth: true
+
+              runcmd:
+                - apt-get update
+                - apt-get install -y redis-server
+                - sed -i 's/^bind 127.0.0.1 ::1/bind 0.0.0.0/' /etc/redis/redis.conf
+                - sed -i 's/^protected-mode yes/protected-mode no/' /etc/redis/redis.conf
+                - systemctl enable redis-server
+                - systemctl restart redis-server
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey-service
+  namespace: messaging
+spec:
+  selector:
+    kubevirt.io/domain: valkey-vm
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: grafana-vm
+  namespace: messaging
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: grafana-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+            - name: emptydisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+              ports:
+                - port: 3000
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:22.04
+        - name: emptydisk
+          emptyDisk:
+            capacity: 10Gi
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              users:
+                - name: ubuntu
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  shell: /bin/bash
+                  lock_passwd: false
+                  plain_text_passwd: 'ubuntu'
+
+              ssh_pwauth: true
+
+              runcmd:
+                - mkfs.ext4 /dev/vdc
+                - mount /dev/vdc /opt
+                - mkdir -p /opt/apt-cache/archives/partial
+                - apt-get update
+                - apt-get install -y wget gnupg
+                - wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor > /etc/apt/keyrings/grafana.gpg
+                - chmod 644 /etc/apt/keyrings/grafana.gpg
+                - echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" > /etc/apt/sources.list.d/grafana.list
+                - apt-get update
+                - apt-get -o dir::cache=/opt/apt-cache install -y grafana
+                - systemctl enable grafana-server
+                - systemctl start grafana-server
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: messaging
+spec:
+  selector:
+    kubevirt.io/domain: grafana-vm
+  ports:
+    - port: 3000
+      targetPort: 3000

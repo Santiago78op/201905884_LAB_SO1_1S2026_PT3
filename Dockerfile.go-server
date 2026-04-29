@@ -1,0 +1,33 @@
+# Estapa de Builder
+# go version go1.26.2
+FROM --platform=linux/amd64 golang:1.26.2 AS builder
+
+# Directorio raiz del proyecto
+WORKDIR /app
+
+# Copiar el proto compartido
+COPY /proto /app/proto/
+
+# Copiar el código del servidor Go
+COPY /go-grpc-server-writer /app/go-grpc-server-writer/
+
+# Entrar al directorio del servidor Go
+WORKDIR /app/go-grpc-server-writer
+
+# Descargar las dependencias
+RUN go mod download
+
+# Compilar el binario
+RUN CGO_ENABLED=0 go build -o go-server ./cmd/app/
+
+# Etapa de runtime
+FROM --platform=linux/amd64 alpine:3.21 AS runtime
+
+# Directorio donde vivirá el binario
+WORKDIR /app
+
+# Copiar binario compilado desde la etapa builder
+COPY --from=builder /app/go-grpc-server-writer/go-server .
+
+# Ejecutar aplicación
+CMD ["./go-server"]
